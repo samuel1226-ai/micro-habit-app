@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微習慣管理 App - Micro Habit Manager</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Vue 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Canvas Confetti for Celebration -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [v-cloak] { display: none; }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        .task-enter-active, .task-leave-active {
+            transition: all 0.3s ease;
+        }
+        .task-enter-from, .task-leave-to {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
+
+    <div id="app" v-cloak class="flex-1 flex flex-col max-w-4xl w-full mx-auto pb-20 md:pb-6">
+        
+        <!-- Header / Top Bar -->
+        <header class="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-3 sm:px-6 shadow-sm">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-brand-500 text-white flex items-center justify-center font-bold text-xl shadow-md shadow-brand-500/20">
+                        <i class="fa-solid fa-seedling"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold text-slate-900 leading-tight">微習慣 MicroHabits</h1>
+                        <p class="text-xs text-slate-500">每天積累 1%，成就大目標</p>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs (Desktop) -->
+                <nav class="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                    <button @click="currentTab = 'today'" 
+                            :class="currentTab === 'today' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'"
+                            class="px-4 py-1.5 rounded-lg text-sm transition-all flex items-center gap-2">
+                        <i class="fa-regular fa-calendar-check text-brand-600"></i> 今日打卡
+                    </button>
+                    <button @click="currentTab = 'goals'" 
+                            :class="currentTab === 'goals' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'"
+                            class="px-4 py-1.5 rounded-lg text-sm transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-sitemap text-indigo-500"></i> 目標架構
+                    </button>
+                    <button @click="currentTab = 'analytics'" 
+                            :class="currentTab === 'analytics' ? 'bg-white text-slate-900 shadow-sm font-semibold' : 'text-slate-600 hover:text-slate-900'"
+                            class="px-4 py-1.5 rounded-lg text-sm transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line text-amber-500"></i> 統計概覽
+                    </button>
+                </nav>
+
+                <!-- Action Button -->
+                <button @click="openTaskModal()" class="bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-medium px-3 py-2 sm:px-4 sm:py-2 rounded-xl transition shadow-sm flex items-center gap-2">
+                    <i class="fa-solid fa-plus"></i>
+                    <span class="hidden sm:inline">新增微習慣</span>
+                    <span class="sm:hidden">新增</span>
+                </button>
+            </div>
+        </header>
+
+        <main class="flex-1 p-4 sm:p-6 space-y-6">
+
+            <!-- TAB 1: TODAY'S CHECKLIST -->
+            <section v-if="currentTab === 'today'" class="space-y-6">
+                <!-- Date Selector & Progress Summary -->
+                <div class="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200/80 shadow-sm space-y-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                        <div class="flex items-center gap-2">
+                            <button @click="changeDate(-1)" class="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition" title="前一天">
+                                <i class="fa-solid fa-chevron-left text-sm"></i>
+                            </button>
+                            <input type="date" v-model="selectedDate" class="font-bold text-slate-800 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <button @click="changeDate(1)" class="p-2 rounded-lg hover:bg-slate-100 text-slate-600 transition" title="後一天">
+                                <i class="fa-solid fa-chevron-right text-sm"></i>
+                            </button>
+                            <button v-if="selectedDate !== todayStr" @click="selectedDate = todayStr" class="text-xs bg-brand-50 text-brand-700 border border-brand-200 px-2.5 py-1 rounded-lg font-medium hover:bg-brand-100 transition">
+                                回到今天
+                            </button>
+                        </div>
+                        <div class="text-xs text-slate-500 flex items-center gap-2">
+                            <span><i class="fa-solid fa-fire text-amber-500 mr-1"></i>連續打卡：<strong class="text-slate-800 text-sm">{{ currentStreak }} 天</strong></span>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div>
+                        <div class="flex justify-between items-center text-sm mb-2">
+                            <span class="font-semibold text-slate-700">完成進度</span>
+                            <span class="text-xs font-bold text-brand-700 bg-brand-50 px-2.5 py-0.5 rounded-full">
+                                {{ completedCount }} / {{ tasks.length }} ({{ completionPercentage }}%)
+                            </span>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                            <div class="bg-brand-500 h-3 rounded-full transition-all duration-500 ease-out"
+                                 :style="{ width: completionPercentage + '%' }"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div v-if="tasks.length === 0" class="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300 p-8">
+                    <div class="w-16 h-16 bg-brand-50 text-brand-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+                        <i class="fa-solid fa-seedling"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-slate-800 mb-1">尚未建立任何每日微習慣</h3>
+                    <p class="text-slate-500 text-sm mb-4">微習慣是每天只需花 2 分鐘就能完成的小行動！</p>
+                    <button @click="openTaskModal()" class="bg-brand-600 hover:bg-brand-700 text-white font-medium px-5 py-2.5 rounded-xl text-sm transition">
+                        <i class="fa-solid fa-plus mr-1"></i> 立即新增第一個微習慣
+                    </button>
+                </div>
+
+                <!-- Task List Grouped by Ultimate Goal -->
+                <div v-else class="space-y-4">
+                    <div v-for="group in groupedTasks" :key="group.goalId" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                        <!-- Group Header -->
+                        <div class="bg-slate-50/80 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full" :style="{ backgroundColor: group.color || '#3b82f6' }"></span>
+                                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-600">
+                                    {{ group.goalTitle }}
+                                </h3>
+                            </div>
+                            <span class="text-xs text-slate-400 font-medium">
+                                {{ group.tasks.filter(t => isTaskCompleted(t.id)).length }}/{{ group.tasks.length }}
+                            </span>
+                        </div>
+
+                        <!-- Tasks in Group -->
+                        <div class="divide-y divide-slate-100">
+                            <div v-for="task in group.tasks" :key="task.id" 
+                                 class="p-4 flex items-center justify-between hover:bg-slate-50/50 transition group">
+                                <div class="flex items-start gap-3.5 flex-1 min-w-0 pr-3">
+                                    <!-- Checkbox Button -->
+                                    <button @click="toggleTask(task.id)" 
+                                            :class="isTaskCompleted(task.id) ? 'bg-brand-500 border-brand-500 text-white' : 'border-slate-300 hover:border-brand-500 text-transparent'"
+                                            class="mt-0.5 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all shrink-0">
+                                        <i class="fa-solid fa-check text-xs"></i>
+                                    </button>
+
+                                    <!-- Task Details -->
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-2">
+                                            <span :class="{ 'line-through text-slate-400': isTaskCompleted(task.id), 'text-slate-800 font-semibold': !isTaskCompleted(task.id) }" 
+                                                  class="text-sm transition-all truncate">
+                                                {{ task.title }}
+                                            </span>
+                                            <span v-if="task.microGoalTitle" class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full shrink-0">
+                                                {{ task.microGoalTitle }}
+                                            </span>
+                                        </div>
+                                        <p v-if="task.minTarget" class="text-xs text-slate-400 mt-0.5 truncate">
+                                            <i class="fa-regular fa-flag text-[10px] mr-1"></i>最低執行標準：{{ task.minTarget }}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Action Buttons -->
+                                <div class="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button @click="openTaskModal(task)" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition" title="編輯">
+                                        <i class="fa-regular fa-pen-to-square text-xs"></i>
+                                    </button>
+                                    <button @click="confirmDeleteTask(task.id)" class="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition" title="刪除">
+                                        <i class="fa-regular fa-trash-can text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: GOAL HIERARCHY (樹狀結構與目標管理) -->
+            <section v-if="currentTab === 'goals'" class="space-y-6">
+                <!-- Header with Action -->
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900">目標金字塔與架構</h2>
+                        <p class="text-xs text-slate-500">將龐大的最終目標，拆解為微目標與每日微習慣</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button @click="openGoalModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-medium px-3 py-2 rounded-xl transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-plus"></i> 新增最終目標
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Ultimate Goals Tree View -->
+                <div class="space-y-6">
+                    <!-- Goals list -->
+                    <div v-for="uGoal in ultimateGoals" :key="uGoal.id" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                        <!-- Ultimate Goal Header -->
+                        <div class="p-4 sm:p-5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex items-start justify-between gap-4">
+                            <div class="flex items-start gap-3">
+                                <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 mt-0.5" :style="{ backgroundColor: uGoal.color || '#3b82f6' }">
+                                    <i class="fa-solid fa-bullseye text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h3 class="font-bold text-slate-800 text-base">{{ uGoal.title }}</h3>
+                                        <span class="text-[10px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">最終目標</span>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mt-1">{{ uGoal.description || '無詳細說明' }}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button @click="openMicroGoalModal(uGoal.id)" class="text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-medium px-2.5 py-1.5 rounded-lg transition mr-1">
+                                    <i class="fa-solid fa-plus text-[10px]"></i> 新增微目標
+                                </button>
+                                <button @click="openGoalModal(uGoal)" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition" title="編輯">
+                                    <i class="fa-regular fa-pen-to-square text-xs"></i>
+                                </button>
+                                <button @click="confirmDeleteUltimateGoal(uGoal.id)" class="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition" title="刪除">
+                                    <i class="fa-regular fa-trash-can text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Micro Goals Container -->
+                        <div class="p-4 sm:p-5 bg-slate-50/40 space-y-4">
+                            <!-- Get Micro Goals under this Ultimate Goal -->
+                            <div v-for="mGoal in getMicroGoals(uGoal.id)" :key="mGoal.id" class="bg-white rounded-xl border border-slate-200/60 p-4 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <i class="fa-solid fa-arrow-turn-down-right text-indigo-400 text-xs"></i>
+                                        <h4 class="font-semibold text-slate-800 text-sm">{{ mGoal.title }}</h4>
+                                        <span class="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-medium">微目標</span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <button @click="openTaskModalForMicroGoal(uGoal.id, mGoal.id)" class="text-[11px] text-brand-600 hover:bg-brand-50 font-medium px-2 py-1 rounded-md transition">
+                                            <i class="fa-solid fa-plus text-[9px]"></i> 綁定習慣
+                                        </button>
+                                        <button @click="openMicroGoalModal(uGoal.id, mGoal)" class="p-1 text-slate-400 hover:text-slate-600 rounded" title="編輯">
+                                            <i class="fa-regular fa-pen-to-square text-xs"></i>
+                                        </button>
+                                        <button @click="confirmDeleteMicroGoal(mGoal.id)" class="p-1 text-slate-400 hover:text-red-600 rounded" title="刪除">
+                                            <i class="fa-regular fa-trash-can text-xs"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Tasks linked to Micro Goal -->
+                                <div class="pl-4 space-y-2 border-l-2 border-indigo-100">
+                                    <div v-for="t in getTasksByMicroGoal(mGoal.id)" :key="t.id" class="flex items-center justify-between bg-slate-50 p-2.5 rounded-lg text-xs">
+                                        <div class="flex items-center gap-2">
+                                            <i class="fa-solid fa-seedling text-brand-500"></i>
+                                            <span class="font-medium text-slate-700">{{ t.title }}</span>
+                                            <span v-if="t.minTarget" class="text-slate-400">({{ t.minTarget }})</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <button @click="openTaskModal(t)" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-regular fa-pen-to-square"></i></button>
+                                            <button @click="confirmDeleteTask(t.id)" class="text-slate-400 hover:text-red-600 p-1"><i class="fa-regular fa-trash-can"></i></button>
+                                        </div>
+                                    </div>
+                                    <p v-if="getTasksByMicroGoal(mGoal.id).length === 0" class="text-xs text-slate-400 italic py-1">
+                                        尚無關聯的每日微習慣
+                                    </p>
+                                </div>
+                            </div>
+
+                            <p v-if="getMicroGoals(uGoal.id).length === 0" class="text-xs text-slate-400 text-center py-2">
+                                尚未設定任何微目標，點擊右上角新增
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Standalone Tasks Section -->
+                    <div class="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-sm">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-feather text-amber-500"></i>
+                                <h3 class="font-bold text-slate-800 text-sm">獨立微習慣 (無關聯特定目標)</h3>
+                            </div>
+                            <button @click="openTaskModal()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-medium transition">
+                                <i class="fa-solid fa-plus text-[10px]"></i> 新增
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div v-for="st in standaloneTasks" :key="st.id" class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs">
+                                <div>
+                                    <p class="font-semibold text-slate-800">{{ st.title }}</p>
+                                    <p v-if="st.minTarget" class="text-slate-400 mt-0.5">{{ st.minTarget }}</p>
+                                </div>
+                                <div class="flex gap-1">
+                                    <button @click="openTaskModal(st)" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-regular fa-pen-to-square"></i></button>
+                                    <button @click="confirmDeleteTask(st.id)" class="text-slate-400 hover:text-red-600 p-1"><i class="fa-regular fa-trash-can"></i></button>
+                                </div>
+                            </div>
+                            <p v-if="standaloneTasks.length === 0" class="text-xs text-slate-400 col-span-2 py-2">無獨立微習慣</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: ANALYTICS (統計與數據) -->
+            <section v-if="currentTab === 'analytics'" class="space-y-6">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900">微習慣統計與累積</h2>
+                    <p class="text-xs text-slate-500">查看近期的持續性與完成成就</p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm text-center">
+                        <div class="w-10 h-10 bg-amber-50 text-amber-500 rounded-xl flex items-center justify-center mx-auto mb-2 text-lg">
+                            <i class="fa-solid fa-fire"></i>
+                        </div>
+                        <div class="text-2xl font-bold text-slate-800">{{ currentStreak }} 天</div>
+                        <div class="text-xs text-slate-400 mt-1">目前連續打卡</div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm text-center">
+                        <div class="w-10 h-10 bg-brand-50 text-brand-600 rounded-xl flex items-center justify-center mx-auto mb-2 text-lg">
+                            <i class="fa-solid fa-check-double"></i>
+                        </div>
+                        <div class="text-2xl font-bold text-slate-800">{{ totalCompletions }} 次</div>
+                        <div class="text-xs text-slate-400 mt-1">累計打卡事項</div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm text-center">
+                        <div class="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mx-auto mb-2 text-lg">
+                            <i class="fa-solid fa-bullseye"></i>
+                        </div>
+                        <div class="text-2xl font-bold text-slate-800">{{ ultimateGoals.length }} 個</div>
+                        <div class="text-xs text-slate-400 mt-1">追蹤中的最終目標</div>
+                    </div>
+                </div>
+
+                <!-- Last 7 Days Activity Grid -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                    <h3 class="font-bold text-slate-800 text-sm">過去 7 天養成紀錄</h3>
+                    <div class="grid grid-cols-7 gap-2 text-center">
+                        <div v-for="day in past7Days" :key="day.dateStr" class="flex flex-col items-center gap-1.5">
+                            <span class="text-[11px] text-slate-400 font-medium">{{ day.dayLabel }}</span>
+                            <div class="w-full aspect-square rounded-xl flex flex-col items-center justify-center p-1 border transition"
+                                 :class="day.total > 0 && day.completed === day.total ? 'bg-brand-500 text-white border-brand-500' : (day.completed > 0 ? 'bg-brand-100 border-brand-200 text-brand-800' : 'bg-slate-50 border-slate-200 text-slate-400')">
+                                <span class="text-xs font-bold">{{ day.completed }}/{{ day.total }}</span>
+                            </div>
+                            <span class="text-[10px] text-slate-400">{{ day.dateShort }}</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Mobile Bottom Navigation -->
+        <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-2 flex justify-around z-30 shadow-lg">
+            <button @click="currentTab = 'today'" :class="currentTab === 'today' ? 'text-brand-600 font-bold' : 'text-slate-400'" class="flex flex-col items-center gap-1 text-xs">
+                <i class="fa-regular fa-calendar-check text-lg"></i>
+                <span>今日打卡</span>
+            </button>
+            <button @click="currentTab = 'goals'" :class="currentTab === 'goals' ? 'text-indigo-600 font-bold' : 'text-slate-400'" class="flex flex-col items-center gap-1 text-xs">
+                <i class="fa-solid fa-sitemap text-lg"></i>
+                <span>目標架構</span>
+            </button>
+            <button @click="currentTab = 'analytics'" :class="currentTab === 'analytics' ? 'text-amber-500 font-bold' : 'text-slate-400'" class="flex flex-col items-center gap-1 text-xs">
+                <i class="fa-solid fa-chart-line text-lg"></i>
+                <span>統計概覽</span>
+            </button>
+        </nav>
+
+        <!-- MODAL 1: TASK (MICRO HABIT) MODAL -->
+        <div v-if="showTaskModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-bold text-slate-800 text-base">
+                        {{ editingTask ? '編輯微習慣' : '新增每日微習慣' }}
+                    </h3>
+                    <button @click="showTaskModal = false" class="text-slate-400 hover:text-slate-600">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">習慣名稱 *</label>
+                        <input type="text" v-model="taskForm.title" placeholder="例如：做 5 個俯臥撐、背 3 個單字" class="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">最低執行標準 (Minimum Viable Action)</label>
+                        <input type="text" v-model="taskForm.minTarget" placeholder="例如：開書翻開第一頁 (越微小越容易持續)" class="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">關聯最終目標 (可選)</label>
+                        <select v-model="taskForm.ultimateGoalId" @change="onUltimateGoalChange" class="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="">無 (獨立微習慣)</option>
+                            <option v-for="g in ultimateGoals" :key="g.id" :value="g.id">{{ g.title }}</option>
+                        </select>
+                    </div>
+
+                    <div v-if="taskForm.ultimateGoalId">
+                        <label class="block font-semibold text-slate-700 mb-1">關聯微目標 (可選)</label>
+                        <select v-model="taskForm.microGoalId" class="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="">無</option>
+                            <option v-for="mg in getMicroGoals(taskForm.ultimateGoalId)" :key="mg.id" :value="mg.id">{{ mg.title }}</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button @click="showTaskModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50">取消</button>
+                    <button @click="saveTask" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium">儲存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL 2: ULTIMATE GOAL MODAL -->
+        <div v-if="showGoalModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-bold text-slate-800 text-base">
+                        {{ editingGoal ? '編輯最終目標' : '新增最終目標' }}
+                    </h3>
+                    <button @click="showGoalModal = false" class="text-slate-400 hover:text-slate-600">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">最終目標名稱 *</label>
+                        <input type="text" v-model="goalForm.title" placeholder="例如：體重減輕 5 公斤、考取 N1 檢定" class="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">說明 / 願景描述</label>
+                        <textarea v-model="goalForm.description" rows="3" placeholder="為什麼這個目標對你很重要？" class="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">代表顏色</label>
+                        <div class="flex gap-2">
+                            <button v-for="c in colorOptions" :key="c" @click="goalForm.color = c" 
+                                    :style="{ backgroundColor: c }"
+                                    :class="goalForm.color === c ? 'ring-2 ring-offset-2 ring-slate-400' : ''"
+                                    class="w-6 h-6 rounded-full transition"></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button @click="showGoalModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50">取消</button>
+                    <button @click="saveGoal" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium">儲存目標</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL 3: MICRO GOAL MODAL -->
+        <div v-if="showMicroGoalModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-bold text-slate-800 text-base">
+                        {{ editingMicroGoal ? '編輯微目標' : '新增微目標' }}
+                    </h3>
+                    <button @click="showMicroGoalModal = false" class="text-slate-400 hover:text-slate-600">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">微目標名稱 *</label>
+                        <input type="text" v-model="microGoalForm.title" placeholder="例如：每週規律運動、每日累積單字量" class="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button @click="showMicroGoalModal = false" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50">取消</button>
+                    <button @click="saveMicroGoal" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium">儲存微目標</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, watch } = Vue;
+
+        createApp({
+            setup() {
+                // Today's date string ISO format YYYY-MM-DD
+                const getTodayStr = () => {
+                    const d = new Date();
+                    return d.toISOString().split('T')[0];
+                };
+
+                const todayStr = getTodayStr();
+                const selectedDate = ref(todayStr);
+                const currentTab = ref('today');
+
+                // Color options for Ultimate Goals
+                const colorOptions = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'];
+
+                // Core Data State
+                const ultimateGoals = ref([]);
+                const microGoals = ref([]);
+                const tasks = ref([]);
+                // Logs structure: { 'YYYY-MM-DD': { taskId: true } }
+                const logs = ref({});
+
+                // Modals state
+                const showTaskModal = ref(false);
+                const editingTask = ref(null);
+                const taskForm = ref({
+                    title: '',
+                    minTarget: '',
+                    ultimateGoalId: '',
+                    microGoalId: ''
+                });
+
+                const showGoalModal = ref(false);
+                const editingGoal = ref(null);
+                const goalForm = ref({
+                    title: '',
+                    description: '',
+                    color: '#3b82f6'
+                });
+
+                const showMicroGoalModal = ref(false);
+                const editingMicroGoal = ref(null);
+                const microGoalForm = ref({
+                    ultimateGoalId: '',
+                    title: ''
+                });
+
+                // Load Initial Data from LocalStorage or Sample Data
+                const loadData = () => {
+                    const savedU = localStorage.getItem('micro_habits_u_goals');
+                    const savedM = localStorage.getItem('micro_habits_m_goals');
+                    const savedT = localStorage.getItem('micro_habits_tasks');
+                    const savedL = localStorage.getItem('micro_habits_logs');
+
+                    if (savedU && savedM && savedT && savedL) {
+                        ultimateGoals.value = JSON.parse(savedU);
+                        microGoals.value = JSON.parse(savedM);
+                        tasks.value = JSON.parse(savedT);
+                        logs.value = JSON.parse(savedL);
+                    } else {
+                        // Demo Preset Data
+                        const ug1Id = 'ug_' + Date.now();
+                        const mg1Id = 'mg_' + Date.now();
+                        const t1Id = 't_1';
+                        const t2Id = 't_2';
+                        const t3Id = 't_3';
+
+                        ultimateGoals.value = [
+                            { id: ug1Id, title: '保持健康與強健體態', description: '建立可持續的規律運動習慣', color: '#10b981' }
+                        ];
+
+                        microGoals.value = [
+                            { id: mg1Id, ultimateGoalId: ug1Id, title: '每天增加基礎活動量' }
+                        ];
+
+                        tasks.value = [
+                            { id: t1Id, ultimateGoalId: ug1Id, microGoalId: mg1Id, title: '做 5 個俯臥撐', minTarget: '至少做 1 個' },
+                            { id: t2Id, ultimateGoalId: ug1Id, microGoalId: mg1Id, title: '喝足 2000cc 水', minTarget: '早上起床喝 1 杯水' },
+                            { id: t3Id, ultimateGoalId: '', microGoalId: '', title: '睡前閱讀 5 分鐘', minTarget: '翻開書本第一頁' }
+                        ];
+
+                        logs.value = {};
+                        saveData();
+                    }
+                };
+
+                const saveData = () => {
+                    localStorage.setItem('micro_habits_u_goals', JSON.stringify(ultimateGoals.value));
+                    localStorage.setItem('micro_habits_m_goals', JSON.stringify(microGoals.value));
+                    localStorage.setItem('micro_habits_tasks', JSON.stringify(tasks.value));
+                    localStorage.setItem('micro_habits_logs', JSON.stringify(logs.value));
+                };
+
+                watch([ultimateGoals, microGoals, tasks, logs], saveData, { deep: true });
+
+                // Date Operations
+                const changeDate = (days) => {
+                    const current = new Date(selectedDate.value);
+                    current.setDate(current.getDate() + days);
+                    selectedDate.value = current.toISOString().split('T')[0];
+                };
+
+                // Check Task Completion for selected date
+                const isTaskCompleted = (taskId) => {
+                    return !!(logs.value[selectedDate.value] && logs.value[selectedDate.value][taskId]);
+                };
+
+                // Toggle Task Check
+                const toggleTask = (taskId) => {
+                    if (!logs.value[selectedDate.value]) {
+                        logs.value[selectedDate.value] = {};
+                    }
+                    const newStatus = !logs.value[selectedDate.value][taskId];
+                    logs.value[selectedDate.value][taskId] = newStatus;
+
+                    if (newStatus && typeof confetti === 'function') {
+                        // Trigger light celebration confetti
+                        confetti({
+                            particleCount: 35,
+                            spread: 60,
+                            origin: { y: 0.85 }
+                        });
+                    }
+                };
+
+                // Calculations & Summaries
+                const completedCount = computed(() => {
+                    if (!logs.value[selectedDate.value]) return 0;
+                    return tasks.value.filter(t => logs.value[selectedDate.value][t.id]).length;
+                });
+
+                const completionPercentage = computed(() => {
+                    if (tasks.value.length === 0) return 0;
+                    return Math.round((completedCount.value / tasks.value.length) * 100);
+                });
+
+                // Group tasks by Ultimate Goal for Today's view
+                const groupedTasks = computed(() => {
+                    const groups = [];
+                    
+                    // Add Ultimate Goals groups
+                    ultimateGoals.value.forEach(uGoal => {
+                        const goalTasks = tasks.value.filter(t => t.ultimateGoalId === uGoal.id).map(t => {
+                            const mg = microGoals.value.find(m => m.id === t.microGoalId);
+                            return { ...t, microGoalTitle: mg ? mg.title : '' };
+                        });
+
+                        if (goalTasks.length > 0) {
+                            groups.push({
+                                goalId: uGoal.id,
+                                goalTitle: uGoal.title,
+                                color: uGoal.color,
+                                tasks: goalTasks
+                            });
+                        }
+                    });
+
+                    // Add Standalone Group
+                    const standalone = tasks.value.filter(t => !t.ultimateGoalId).map(t => ({ ...t, microGoalTitle: '' }));
+                    if (standalone.length > 0) {
+                        groups.push({
+                            goalId: 'standalone',
+                            goalTitle: '獨立微習慣',
+                            color: '#64748b',
+                            tasks: standalone
+                        });
+                    }
+
+                    return groups;
+                });
+
+                const standaloneTasks = computed(() => {
+                    return tasks.value.filter(t => !t.ultimateGoalId);
+                });
+
+                // Helper getters
+                const getMicroGoals = (uGoalId) => {
+                    return microGoals.value.filter(m => m.ultimateGoalId === uGoalId);
+                };
+
+                const getTasksByMicroGoal = (mGoalId) => {
+                    return tasks.value.filter(t => t.microGoalId === mGoalId);
+                };
+
+                // Streak calculation
+                const currentStreak = computed(() => {
+                    let streak = 0;
+                    let checkDate = new Date();
+
+                    while (true) {
+                        const dateStr = checkDate.toISOString().split('T')[0];
+                        const dayLog = logs.value[dateStr];
+                        
+                        if (dayLog && tasks.value.length > 0) {
+                            const completedToday = tasks.value.filter(t => dayLog[t.id]).length;
+                            if (completedToday > 0) {
+                                streak++;
+                            } else if (dateStr !== todayStr) {
+                                break;
+                            }
+                        } else if (dateStr !== todayStr) {
+                            break;
+                        }
+
+                        checkDate.setDate(checkDate.getDate() - 1);
+                        if (streak > 365) break; // guard limit
+                    }
+                    return streak;
+                });
+
+                const totalCompletions = computed(() => {
+                    let count = 0;
+                    Object.values(logs.value).forEach(dayLog => {
+                        Object.values(dayLog).forEach(completed => {
+                            if (completed) count++;
+                        });
+                    });
+                    return count;
+                });
+
+                // Past 7 Days calculation for Analytics
+                const past7Days = computed(() => {
+                    const days = [];
+                    for (let i = 6; i >= 0; i--) {
+                        const d = new Date();
+                        d.setDate(d.getDate() - i);
+                        const dateStr = d.toISOString().split('T')[0];
+                        const dayLog = logs.value[dateStr] || {};
+                        const completed = tasks.value.filter(t => dayLog[t.id]).length;
+                        
+                        const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+                        days.push({
+                            dateStr,
+                            dateShort: (d.getMonth() + 1) + '/' + d.getDate(),
+                            dayLabel: '週' + dayNames[d.getDay()],
+                            completed,
+                            total: tasks.value.length
+                        });
+                    }
+                    return days;
+                });
+
+                // Task Modal CRUD
+                const openTaskModal = (task = null) => {
+                    editingTask.value = task;
+                    if (task) {
+                        taskForm.value = {
+                            title: task.title,
+                            minTarget: task.minTarget || '',
+                            ultimateGoalId: task.ultimateGoalId || '',
+                            microGoalId: task.microGoalId || ''
+                        };
+                    } else {
+                        taskForm.value = { title: '', minTarget: '', ultimateGoalId: '', microGoalId: '' };
+                    }
+                    showTaskModal.value = true;
+                };
+
+                const openTaskModalForMicroGoal = (uGoalId, mGoalId) => {
+                    editingTask.value = null;
+                    taskForm.value = {
+                        title: '',
+                        minTarget: '',
+                        ultimateGoalId: uGoalId,
+                        microGoalId: mGoalId
+                    };
+                    showTaskModal.value = true;
+                };
+
+                const onUltimateGoalChange = () => {
+                    taskForm.value.microGoalId = '';
+                };
+
+                const saveTask = () => {
+                    if (!taskForm.value.title.trim()) return;
+
+                    if (editingTask.value) {
+                        const idx = tasks.value.findIndex(t => t.id === editingTask.value.id);
+                        if (idx !== -1) {
+                            tasks.value[idx] = {
+                                ...tasks.value[idx],
+                                title: taskForm.value.title.trim(),
+                                minTarget: taskForm.value.minTarget.trim(),
+                                ultimateGoalId: taskForm.value.ultimateGoalId,
+                                microGoalId: taskForm.value.microGoalId
+                            };
+                        }
+                    } else {
+                        tasks.value.push({
+                            id: 't_' + Date.now(),
+                            title: taskForm.value.title.trim(),
+                            minTarget: taskForm.value.minTarget.trim(),
+                            ultimateGoalId: taskForm.value.ultimateGoalId,
+                            microGoalId: taskForm.value.microGoalId
+                        });
+                    }
+                    showTaskModal.value = false;
+                };
+
+                const confirmDeleteTask = (id) => {
+                    tasks.value = tasks.value.filter(t => t.id !== id);
+                };
+
+                // Ultimate Goal Modal CRUD
+                const openGoalModal = (goal = null) => {
+                    editingGoal.value = goal;
+                    if (goal) {
+                        goalForm.value = { ...goal };
+                    } else {
+                        goalForm.value = { title: '', description: '', color: '#3b82f6' };
+                    }
+                    showGoalModal.value = true;
+                };
+
+                const saveGoal = () => {
+                    if (!goalForm.value.title.trim()) return;
+
+                    if (editingGoal.value) {
+                        const idx = ultimateGoals.value.findIndex(g => g.id === editingGoal.value.id);
+                        if (idx !== -1) {
+                            ultimateGoals.value[idx] = {
+                                ...ultimateGoals.value[idx],
+                                title: goalForm.value.title.trim(),
+                                description: goalForm.value.description.trim(),
+                                color: goalForm.color
+                            };
+                        }
+                    } else {
+                        ultimateGoals.value.push({
+                            id: 'ug_' + Date.now(),
+                            title: goalForm.value.title.trim(),
+                            description: goalForm.value.description.trim(),
+                            color: goalForm.value.color
+                        });
+                    }
+                    showGoalModal.value = false;
+                };
+
+                const confirmDeleteUltimateGoal = (id) => {
+                    ultimateGoals.value = ultimateGoals.value.filter(g => g.id !== id);
+                    // Unlink associated micro goals and tasks
+                    microGoals.value = microGoals.value.filter(m => m.ultimateGoalId !== id);
+                    tasks.value.forEach(t => {
+                        if (t.ultimateGoalId === id) {
+                            t.ultimateGoalId = '';
+                            t.microGoalId = '';
+                        }
+                    });
+                };
+
+                // Micro Goal Modal CRUD
+                const openMicroGoalModal = (uGoalId, mGoal = null) => {
+                    editingMicroGoal.value = mGoal;
+                    if (mGoal) {
+                        microGoalForm.value = { ...mGoal };
+                    } else {
+                        microGoalForm.value = { ultimateGoalId: uGoalId, title: '' };
+                    }
+                    showMicroGoalModal.value = true;
+                };
+
+                const saveMicroGoal = () => {
+                    if (!microGoalForm.value.title.trim()) return;
+
+                    if (editingMicroGoal.value) {
+                        const idx = microGoals.value.findIndex(m => m.id === editingMicroGoal.value.id);
+                        if (idx !== -1) {
+                            microGoals.value[idx].title = microGoalForm.value.title.trim();
+                        }
+                    } else {
+                        microGoals.value.push({
+                            id: 'mg_' + Date.now(),
+                            ultimateGoalId: microGoalForm.value.ultimateGoalId,
+                            title: microGoalForm.value.title.trim()
+                        });
+                    }
+                    showMicroGoalModal.value = false;
+                };
+
+                const confirmDeleteMicroGoal = (id) => {
+                    microGoals.value = microGoals.value.filter(m => m.id !== id);
+                    // Unlink tasks tied to this micro goal
+                    tasks.value.forEach(t => {
+                        if (t.microGoalId === id) {
+                            t.microGoalId = '';
+                        }
+                    });
+                };
+
+                onMounted(() => {
+                    loadData();
+                });
+
+                return {
+                    currentTab,
+                    todayStr,
+                    selectedDate,
+                    changeDate,
+                    ultimateGoals,
+                    microGoals,
+                    tasks,
+                    standaloneTasks,
+                    groupedTasks,
+                    isTaskCompleted,
+                    toggleTask,
+                    completedCount,
+                    completionPercentage,
+                    currentStreak,
+                    totalCompletions,
+                    past7Days,
+                    getMicroGoals,
+                    getTasksByMicroGoal,
+                    // Modals
+                    showTaskModal,
+                    editingTask,
+                    taskForm,
+                    openTaskModal,
+                    openTaskModalForMicroGoal,
+                    onUltimateGoalChange,
+                    saveTask,
+                    confirmDeleteTask,
+                    showGoalModal,
+                    editingGoal,
+                    goalForm,
+                    colorOptions,
+                    openGoalModal,
+                    saveGoal,
+                    confirmDeleteUltimateGoal,
+                    showMicroGoalModal,
+                    editingMicroGoal,
+                    microGoalForm,
+                    openMicroGoalModal,
+                    saveMicroGoal,
+                    confirmDeleteMicroGoal
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
